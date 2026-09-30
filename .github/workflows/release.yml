@@ -26,7 +26,7 @@ jobs:
     name: tag matches Cargo.toml
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Compare
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
@@ -59,7 +59,7 @@ jobs:
       APP: ${{ matrix.app }}
       TARGET: ${{ matrix.target }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           # macOS builds both CPUs and joins them; the others build their own target.
@@ -106,7 +106,7 @@ jobs:
           # Same format as sha256sum: "<hash>  <file>".
           $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
           Set-Content -NoNewline -Path "$asset.sha256" -Value "$hash  $asset`n"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.app }}-${{ matrix.target }}
           path: |
@@ -119,8 +119,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
