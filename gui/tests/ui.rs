@@ -150,3 +150,22 @@ fn a_field_s_right_click_menu_cuts_the_selection(cx: &mut gpui::TestAppContext) 
         assert_eq!(form.title.text(), "");
     });
 }
+
+#[gpui::test]
+fn the_cursor_blinks_and_input_shows_it_again(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let app = App::new(Store::at(dir.path()).unwrap()).unwrap();
+    let (_view, cx) = cx.add_window_view(|window, cx| TaskerView::new(app, window, cx));
+    let shown = |cx: &mut gpui::VisualTestContext| cx.update(|_, cx| cx.global::<caret::Blink>().0);
+    cx.simulate_keystrokes("n");
+    assert!(shown(cx));
+    cx.executor().advance_clock(caret::BLINK);
+    assert!(!shown(cx), "hidden after one blink");
+    cx.simulate_keystrokes("a");
+    assert!(shown(cx), "typing shows it");
+    // The blink starts over at each input, so it stays shown for a full interval after it.
+    cx.executor().advance_clock(caret::BLINK / 2);
+    assert!(shown(cx));
+    cx.executor().advance_clock(caret::BLINK / 2);
+    assert!(!shown(cx));
+}

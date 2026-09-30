@@ -1,8 +1,9 @@
 //! Building blocks shared by the screens: buttons, text fields, status pills, tag chips, cards and tooltips.
 
+use super::caret::caret;
 use super::pointer::{Hit, TextBox, pointable};
 use super::theme::{self, ACCENT, BORDER, DIM, INPUT, Line, Span, Style, TEXT};
-use super::{TaskerView, edited};
+use super::{TaskerView, byte_at, edited};
 use gpui::{
     AnyView, App as GpuiApp, Context, Div, ElementId, FontWeight, SharedString, Stateful, Window, div, prelude::*, px,
     rgb, rgba, transparent_black,
@@ -100,14 +101,15 @@ pub fn text_field(
     cx: &mut Context<TaskerView>,
 ) -> Stateful<Div> {
     let content = if active {
-        Line::from(edited(input.text(), Some(input.cursor()), input.selection()))
+        edited(input.text(), input.selection())
     } else if input.is_empty() {
         Line::styled(placeholder, theme::DIM_STYLE)
     } else {
         Line::raw(input.text())
     };
     let text = content.render();
-    let hit = Hit::new(&text, active.then(|| input.cursor()), input.text().chars().count());
+    let hit = Hit::new(&text, input.text().chars().count());
+    let cursor = active.then(|| caret(&text, byte_at(input.text(), input.cursor())));
     let field = div()
         .id(which.id())
         .flex()
@@ -121,7 +123,8 @@ pub fn text_field(
         .whitespace_nowrap()
         .overflow_hidden()
         .debug_selector(|| which.id().to_string())
-        .child(text);
+        .child(text)
+        .children(cursor);
     pointable(field, which, vec![hit], cx)
 }
 

@@ -7,10 +7,12 @@
 //! - [`tags`]: the tags screen.
 //! - [`dialogs`]: dialogs drawn over the current screen.
 //! - [`widgets`]: buttons, fields, pills and chips.
+//! - [`caret`]: the blinking text cursor.
 //! - [`mod@pointer`]: the mouse in text fields and the text editor.
 //! - [`menu`]: right-click menus.
 //! - [`theme`]: colors, fonts and styled text.
 
+mod caret;
 mod dialogs;
 mod issue;
 mod list;
@@ -82,6 +84,8 @@ struct TaskerView {
     shared: Option<String>,
     /// Redraws every `TICK`; dropped with the view.
     _tick: gpui::Task<()>,
+    /// Blinks the text cursor; replaced on every input, which starts the blink over.
+    blink: gpui::Task<()>,
 }
 
 /// Scroll positions of the scrollable areas.
@@ -124,7 +128,31 @@ impl TaskerView {
             #[cfg(any(target_os = "linux", target_os = "freebsd"))]
             shared: None,
             _tick: tick,
+            blink: Self::blinking(cx),
         }
+    }
+
+    /// Shows the text cursor and starts its blink over. Dropping the previous blink task stops it.
+    fn restart_blink(&mut self, cx: &mut Context<Self>) {
+        drop(std::mem::replace(&mut self.blink, Self::blinking(cx)));
+    }
+
+    /// Shows the text cursor and blinks it from now on: every input restarts it, so it stays solid while typing.
+    fn blinking(cx: &mut Context<Self>) -> gpui::Task<()> {
+        cx.set_global(caret::Blink(true));
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(caret::BLINK).await;
+                let blinked = this.update(cx, |_, cx| {
+                    let shown = cx.global::<caret::Blink>().0;
+                    cx.set_global(caret::Blink(!shown));
+                    cx.notify();
+                });
+                if blinked.is_err() {
+                    break;
+                }
+            }
+        })
     }
 
     /// A key press: a clipboard shortcut, or handed to the app as the terminal version would receive it.
@@ -246,6 +274,7 @@ impl TaskerView {
             return;
         }
         self.share_selection(cx);
+        self.restart_blink(cx);
         // "Open file" asked for an external editor: run it, and re-read the files when it exits
         // since the user may have changed anything.
         if let Some(path) = self.app.edit_request.take() {
@@ -482,22 +511,20 @@ fn when(dt: DateTime<Local>) -> String {
     dt.format("%a %d %b %Y %H:%M").to_string()
 }
 
-/// Text being typed into: the cursor, if any, before character `cursor`, and the characters from `start` to
-/// `end` of `selection` highlighted. The cursor is always at one end of the selection.
-fn edited(text: &str, cursor: Option<usize>, selection: Option<(usize, usize)>) -> Vec<Span> {
-    let byte = |at: usize| text.char_indices().nth(at).map_or(text.len(), |(i, _)| i);
-    let (start, end) = selection.or(cursor.map(|c| (c, c))).unwrap_or((0, 0));
-    let (a, b) = (byte(start), byte(end));
-    let mut spans = vec![
+/// Text being typed into, the characters from `start` to `end` of `selection` highlighted.
+fn edited(text: &str, selection: Option<(usize, usize)>) -> Line {
+    let Some((start, end)) = selection else { return Line::raw(text) };
+    let (a, b) = (byte_at(text, start), byte_at(text, end));
+    Line::from(vec![
         Span::raw(&text[..a]),
         Span::styled(&text[a..b], Style::new().bg(theme::SELECTION)),
         Span::raw(&text[b..]),
-    ];
-    if let Some(cursor) = cursor {
-        let caret = Span::styled("▏", Style::new().fg(theme::ACCENT).bold());
-        spans.insert(if cursor == start { 1 } else { 2 }, caret);
-    }
-    spans
+    ])
+}
+
+/// Byte offset of character `at` in `text`; past the last character means the end.
+fn byte_at(text: &str, at: usize) -> usize {
+    text.char_indices().nth(at).map_or(text.len(), |(i, _)| i)
 }
 
 #[cfg(test)]

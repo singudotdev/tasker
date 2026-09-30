@@ -55,16 +55,14 @@ impl TextBox {
 pub struct Hit {
     /// Where the line was laid out; filled in when the frame is drawn, before any mouse event can use it.
     layout: TextLayout,
-    /// Where the caret was drawn into the text, in characters: it takes a character that isn't in the text.
-    caret: Option<usize>,
     /// Characters in the line being edited: the drawn text may be a placeholder, or a space for an empty line.
     len: usize,
 }
 
 impl Hit {
-    /// The line `text` draws, whose caret (if any) is before character `caret` of a `len`-character line.
-    pub fn new(text: &StyledText, caret: Option<usize>, len: usize) -> Self {
-        Self { layout: text.layout().clone(), caret, len }
+    /// The line `text` draws, of a `len`-character line.
+    pub fn new(text: &StyledText, len: usize) -> Self {
+        Self { layout: text.layout().clone(), len }
     }
 
     /// The character boundary closest to `position`. Above or below the line counts as its first or last row.
@@ -79,12 +77,7 @@ impl Hit {
         let byte = line.closest_index_for_position(point(position.x - bounds.left(), y), line_height);
         let byte = byte.unwrap_or_else(|end| end);
         let drawn = self.layout.text();
-        let chars = drawn.char_indices().take_while(|&(i, _)| i < byte).count();
-        let chars = match self.caret {
-            Some(caret) if chars > caret => chars - 1,
-            _ => chars,
-        };
-        chars.min(self.len)
+        drawn.char_indices().take_while(|&(i, _)| i < byte).count().min(self.len)
     }
 }
 
@@ -148,6 +141,7 @@ pub fn pointable(
                     // Keeps the editor's cursor line in view while dragging past its edge.
                     this.follow = true;
                     this.share_selection(cx);
+                    this.restart_blink(cx);
                     cx.notify();
                 });
             });

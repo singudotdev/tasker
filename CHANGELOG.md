@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Desktop text cursor: a thin blinking line over the text, as in other desktop apps, instead of a character that
+  pushed the text aside. It stays solid while typing and hides while the window isn't focused.
+
 ## [0.1.1] - 2026-09-30
 
 ### Added

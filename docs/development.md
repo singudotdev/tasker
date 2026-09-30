@@ -137,6 +137,7 @@ gui/src/             tasker-gui: the desktop app
     ├── mod.rs       the root view, status bar, buttons that run an action (`action`), GPUI keystrokes → core keys, clipboard shortcuts
     ├── widgets.rs   buttons, segmented controls, text fields, status pills, tag chips, cards, tooltips
     ├── pointer.rs   the mouse in text fields and the editor: place the cursor, drag to select, double/triple-click
+    ├── caret.rs     the text cursor: a thin line drawn over the text, blinking (`Blink`, restarted on every input)
     ├── menu.rs      right-click menus for tasks, comments, tags and text
     ├── theme.rs     colors, fonts, and styled text (`Line` / `Span`)
     ├── list.rs      toolbar (new, search, filters), task table, details panel
@@ -234,7 +235,7 @@ files as integration tests. Keep them inside the crate: rust-analyzer doesn't fo
 | `cli` | commands, list options and output |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
 | `ui` (tui) | wrapping, truncation, popup placement |
-| `ui` (gui) | GPUI keystrokes to core keys, shortcut names for tooltips, typed keys, clipboard shortcuts, drag selection, right-click menus and middle-click paste (Linux) in a real (test) window |
+| `ui` (gui) | GPUI keystrokes to core keys, shortcut names for tooltips, typed keys, clipboard shortcuts, drag selection, right-click menus, middle-click paste (Linux) and the cursor's blink in a real (test) window |
 
 To check the UI by hand, run it in `tmux` against a scratch folder and capture the screen:
 

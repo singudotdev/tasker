@@ -1,10 +1,11 @@
 //! Dialogs drawn over the current screen: the create/edit form, delete confirmations,
 //! the keyboard shortcuts, the text editor and renaming a tag. Each has its buttons at the bottom.
 
+use super::caret::caret;
 use super::pointer::{Hit, TextBox, pointable};
 use super::theme::{self, ACCENT, BORDER, DIM_STYLE, Line, Span, Style};
 use super::widgets::{Kind, button, dim, tag_chip, tag_chips, tag_span, text_field};
-use super::{Scrolls, TaskerView, action, edited, truncate, when};
+use super::{Scrolls, TaskerView, action, byte_at, edited, truncate, when};
 use gpui::{ClickEvent, Context, Div, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, relative, rgb, rgba};
 use tasker_core::app::{App, Back, Click, Confirm, Edit, Field, Form, InputKind, KeysMenu, Mode, RenameTag, Target};
 use tasker_core::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -227,15 +228,10 @@ fn draw_editor(app: &App, edit: &Edit, scroll: &ScrollHandle, follow: bool, cx: 
             let len = line.chars().count();
             (r1..=r2).contains(&index).then_some((if index == r1 { c1 } else { 0 }, if index == r2 { c2 } else { len }))
         });
-        let caret = (index == row).then_some(col);
-        let text = if caret.is_some() || selected.is_some() {
-            Line::from(edited(line, caret, selected))
-        } else {
-            Line::raw(line.clone())
-        }
-        .render();
-        hits.push(Hit::new(&text, caret, line.chars().count()));
-        lines.push(div().child(text));
+        let text = edited(line, selected).render();
+        let cursor = (index == row).then(|| caret(&text, byte_at(line, col)));
+        hits.push(Hit::new(&text, line.chars().count()));
+        lines.push(div().child(text).children(cursor));
     }
     let text = div()
         .id(TextBox::Editor.id())
