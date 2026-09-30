@@ -94,6 +94,26 @@ fn dragging_across_a_field_selects_its_text(cx: &mut gpui::TestAppContext) {
     });
 }
 
+#[gpui::test]
+fn a_task_s_right_click_menu_changes_its_status(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::at(dir.path()).unwrap();
+    store.save(&mut Task::new(1, "a".into(), now())).unwrap();
+    let app = App::new(store).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| TaskerView::new(app, window, cx));
+    cx.run_until_parked();
+    let row = cx.debug_bounds("task 0").expect("the task is listed").center();
+    cx.simulate_mouse_down(row, MouseButton::Right, gpui::Modifiers::none());
+    cx.simulate_mouse_up(row, MouseButton::Right, gpui::Modifiers::none());
+    assert!(view.read_with(cx, |view, _| view.menu.is_some()), "the menu opened");
+    let done = cx.debug_bounds("menu Done").expect("the menu has Done").center();
+    cx.simulate_click(done, gpui::Modifiers::none());
+    view.read_with(cx, |view, _| {
+        assert!(view.menu.is_none(), "picking an entry closes the menu");
+        assert_eq!(view.app.tasks[0].status, Status::Done);
+    });
+}
+
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 #[gpui::test]
 fn selected_text_is_shared_and_middle_click_pastes_it(cx: &mut gpui::TestAppContext) {
@@ -109,5 +129,24 @@ fn selected_text_is_shared_and_middle_click_pastes_it(cx: &mut gpui::TestAppCont
     view.read_with(cx, |view, _| {
         let Mode::Input(form) = &view.app.mode else { panic!("{:?}", view.app.mode) };
         assert_eq!((form.title.text(), form.tags.text()), ("ops", "ps"));
+    });
+}
+
+#[gpui::test]
+fn a_field_s_right_click_menu_cuts_the_selection(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let app = App::new(Store::at(dir.path()).unwrap()).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| TaskerView::new(app, window, cx));
+    let ctrl = if cfg!(target_os = "macos") { "cmd" } else { "ctrl" };
+    cx.simulate_keystrokes(&format!("n a b {ctrl}-a"));
+    let title = cx.debug_bounds("title").expect("the title field is drawn").center();
+    cx.simulate_mouse_down(title, MouseButton::Right, gpui::Modifiers::none());
+    cx.simulate_mouse_up(title, MouseButton::Right, gpui::Modifiers::none());
+    let cut = cx.debug_bounds("menu Cut").expect("the menu has Cut").center();
+    cx.simulate_click(cut, gpui::Modifiers::none());
+    assert_eq!(cx.read_from_clipboard().and_then(|item| item.text()).as_deref(), Some("ab"));
+    view.read_with(cx, |view, _| {
+        let Mode::Input(form) = &view.app.mode else { panic!("{:?}", view.app.mode) };
+        assert_eq!(form.title.text(), "");
     });
 }

@@ -1,9 +1,10 @@
 //! The mouse in text fields and the text editor, as in any desktop app: a press places the cursor,
 //! shift+click and dragging select, a double-click selects a word and a triple-click the line (dragging on
-//! from there selects whole words or lines). On Linux a middle-click pastes the primary selection.
+//! from there selects whole words or lines). A right-click opens the cut / copy / paste menu, and on Linux
+//! a middle-click pastes the primary selection.
 //! Each field remembers where its text was drawn ([`Hit`]) to turn the mouse position into a character.
 
-use super::TaskerView;
+use super::{TaskerView, menu};
 use gpui::{
     Context, DispatchPhase, Div, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Stateful,
     StyledText, TextLayout, Window, canvas, point, prelude::*, px,
@@ -105,6 +106,7 @@ pub fn pointable(
     }
     let lines: Rc<[Hit]> = lines.into();
     let pressed = Rc::clone(&lines);
+    let right_clicked = Rc::clone(&lines);
     let middle_clicked = Rc::clone(&lines);
     let press = cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
         focus(this, which);
@@ -162,7 +164,22 @@ pub fn pointable(
     )
     .absolute()
     .size_0();
-    let element = element.cursor_text().on_mouse_down(MouseButton::Left, press).child(drag);
+    let context_menu = cx.listener(move |this, event: &MouseDownEvent, _window, cx| {
+        focus(this, which);
+        // Right-clicking a selection keeps it to cut or copy; elsewhere it places the cursor, to paste there.
+        if this.app.selected_text().is_none() {
+            let (row, col) = at(&right_clicked, event.position);
+            this.app.point(row, col, Pointer::Place);
+        }
+        let can_paste = cx.read_from_clipboard().and_then(|item| item.text()).is_some_and(|t| !t.is_empty());
+        let entries = menu::for_text(this.app.selected_text().is_some(), can_paste);
+        this.open_menu(event.position, entries, cx);
+    });
+    let element = element
+        .cursor_text()
+        .on_mouse_down(MouseButton::Left, press)
+        .on_mouse_down(MouseButton::Right, context_menu)
+        .child(drag);
     paste_on_middle_click(element, which, middle_clicked, cx)
 }
 

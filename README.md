@@ -51,7 +51,8 @@ The terminal UI:
 - **Lazy by design** in the terminal, in the spirit of lazygit and lazyssh: a task list plus a details panel, one key per action,
   a footer that always shows the keys for the current screen, a runnable `?` menu, and mouse support. There's nothing to configure.
 - **Point and click** on the desktop: a toolbar with New task, search and Active / All / Done filters; status buttons;
-  Edit, Delete and Add comment buttons where you need them; text fields that select and paste like any desktop app. The terminal's keys still work there (`?` lists them).
+  Edit, Delete and Add comment buttons where you need them; right-click menus; text fields that select and paste like
+  any desktop app. The terminal's keys still work there (`?` lists them).
 - **todo, doing, parked, done** with one key each (`s` start, `p` park, `d` done, `b` back to todo). Any number of tasks can be in doing.
 - **Status history:** every change is recorded with its date, and the list shows how long each task has been in its status.
 - **Tasks work like issues:** each has a description and timestamped comments that you can add, edit and delete (`v`, `m`, `c`).

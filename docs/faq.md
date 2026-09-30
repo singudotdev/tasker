@@ -26,7 +26,7 @@ tasker uses the mouse (wheel, click), like lazygit, so the terminal passes mouse
 Hold `shift` while dragging to select text; on macOS use `fn` or `option`, depending on the terminal.
 
 The desktop app selects text as any desktop app does: drag, `shift`+click, or double-click in a field or the editor,
-then copy with `ctrl+c` (see [Mouse](keybindings.md#mouse)).
+then copy with `ctrl+c` or the right-click menu (see [Mouse](keybindings.md#mouse)).
 
 ### Icons (`▶ · ‖ ✓`) show as boxes
 

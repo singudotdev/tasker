@@ -142,9 +142,11 @@ tasker captures the mouse. To select text in the terminal, hold `shift` (on macO
 | action | effect |
 | --- | --- |
 | double-click a task | open it |
+| right-click a task, comment or tag | menu of its actions; a key or a click elsewhere closes it |
 | click a `?` shortcut | run it |
 | back button | leave the task view or the tags screen |
 | click in text | place the cursor |
 | drag, `shift`+click | select |
 | double-click / triple-click in text | select a word / the line; dragging on extends by words / lines |
+| right-click in text | Cut, Copy, Paste, Select all |
 | middle-click in text (Linux) | paste the primary selection (the text last selected, in any app) |

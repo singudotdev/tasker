@@ -4,8 +4,10 @@
 use super::pointer::TextBox;
 use super::theme::{self, BORDER, DIM, Line, TEXT};
 use super::widgets::{self, Kind, card, dim, section, segment, segmented, small, status_pill, tag_chips};
-use super::{Scrolls, TaskerView, action, history_line, when};
-use gpui::{AnyElement, ClickEvent, Context, Div, FontWeight, Window, div, prelude::*, px, rgb};
+use super::{Scrolls, TaskerView, action, history_line, menu, when};
+use gpui::{
+    AnyElement, ClickEvent, Context, Div, FontWeight, MouseButton, MouseDownEvent, Window, div, prelude::*, px, rgb,
+};
 use tasker_core::app::{App, Click, DoneView, Mode};
 use tasker_core::event::{KeyCode, KeyEvent, KeyModifiers};
 use tasker_core::model::{Status, Task, fmt_age, now};
@@ -138,6 +140,7 @@ fn draw_tasks(app: &App, scroll: &Scrolls, follow: bool, cx: &mut Context<Tasker
         let selected = index == app.selected;
         div()
             .id(("task", index))
+            .debug_selector(|| format!("task {index}"))
             .flex()
             .items_center()
             .gap_3()
@@ -153,6 +156,14 @@ fn draw_tasks(app: &App, scroll: &Scrolls, follow: bool, cx: &mut Context<Tasker
                 let click = if event.click_count() >= 2 { Click::OpenRow(index) } else { Click::Row(index) };
                 this.click(click, cx);
             }))
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                    this.app.click(Click::Row(index));
+                    let entries = this.app.selected_task().map(menu::for_task).unwrap_or_default();
+                    this.open_menu(event.position, entries, cx);
+                }),
+            )
             .child(div().w(px(64.)).flex_none().child(status_pill(task.status)))
             .child(div().w(px(40.)).flex_none().text_color(rgb(DIM)).child(format!("#{}", task.id)))
             .child(

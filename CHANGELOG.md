@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Desktop text fields and editor: click places the cursor; drag or `Shift`+click selects; double-click selects a word
   and triple-click the line, and dragging on extends by words or lines. On Linux, selected text goes to the primary
   selection and a middle-click pastes it.
+- Desktop right-click menus on a task (open, edit, description, comment, status, open file, delete), a comment
+  (edit, delete), a tag (rename, color, delete), and in text (cut, copy, paste, select all).
 - Desktop: clicking a `?` shortcut runs it; the mouse's back button leaves the task view and the tags screen.
 
 ## [0.1.0] - 2026-09-30

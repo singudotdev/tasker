@@ -8,11 +8,13 @@
 //! - [`dialogs`]: dialogs drawn over the current screen.
 //! - [`widgets`]: buttons, fields, pills and chips.
 //! - [`mod@pointer`]: the mouse in text fields and the text editor.
+//! - [`menu`]: right-click menus.
 //! - [`theme`]: colors, fonts and styled text.
 
 mod dialogs;
 mod issue;
 mod list;
+mod menu;
 mod pointer;
 mod tags;
 mod theme;
@@ -22,8 +24,8 @@ use anyhow::{Context as _, Result, bail};
 use chrono::{DateTime, Local};
 use gpui::{
     App as GpuiApp, Bounds, ClickEvent, ClipboardItem, Context, Div, ElementId, FocusHandle, KeyDownEvent, Keystroke,
-    MouseButton, MouseDownEvent, NavigationDirection, ScrollHandle, SharedString, Stateful, Window, WindowBounds,
-    WindowOptions, div, prelude::*, px, rgb, size,
+    MouseButton, MouseDownEvent, NavigationDirection, Pixels, Point, ScrollHandle, SharedString, Stateful, Window,
+    WindowBounds, WindowOptions, div, prelude::*, px, rgb, size,
 };
 use std::path::Path;
 use std::process::Command;
@@ -73,6 +75,8 @@ struct TaskerView {
     follow: bool,
     /// The field or editor a mouse drag that selects text started in, while the button is down.
     drag: Option<pointer::TextBox>,
+    /// The open right-click menu, if any.
+    menu: Option<menu::ContextMenu>,
     /// The text last put in the primary selection, so it's only replaced when the selection changes.
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     shared: Option<String>,
@@ -116,6 +120,7 @@ impl TaskerView {
             scroll: Scrolls::default(),
             follow: true,
             drag: None,
+            menu: None,
             #[cfg(any(target_os = "linux", target_os = "freebsd"))]
             shared: None,
             _tick: tick,
@@ -124,6 +129,12 @@ impl TaskerView {
 
     /// A key press: a clipboard shortcut, or handed to the app as the terminal version would receive it.
     fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        // An open menu takes the key only to close, as desktop menus do.
+        if self.menu.take().is_some() {
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         if self.clipboard(&event.keystroke, cx) {
             cx.stop_propagation();
             self.follow = true;
@@ -151,26 +162,57 @@ impl TaskerView {
         if !shortcut || modifiers.alt {
             return false;
         }
-        match keystroke.key.as_str() {
-            "a" => self.app.select_all(),
-            "c" => {
+        let op = match keystroke.key.as_str() {
+            "a" => ClipboardOp::SelectAll,
+            "c" => ClipboardOp::Copy,
+            "x" => ClipboardOp::Cut,
+            "v" => ClipboardOp::Paste,
+            _ => return false,
+        };
+        self.clipboard_op(op, cx);
+        true
+    }
+
+    /// Selects all, copies, cuts or pastes in the field or editor being typed into, with the system clipboard.
+    fn clipboard_op(&mut self, op: ClipboardOp, cx: &mut Context<Self>) {
+        match op {
+            ClipboardOp::SelectAll => self.app.select_all(),
+            ClipboardOp::Copy => {
                 if let Some(text) = self.app.selected_text() {
                     cx.write_to_clipboard(ClipboardItem::new_string(text));
                 }
             }
-            "x" => {
+            ClipboardOp::Cut => {
                 if let Some(text) = self.app.cut() {
                     cx.write_to_clipboard(ClipboardItem::new_string(text));
                 }
             }
-            "v" => {
+            ClipboardOp::Paste => {
                 if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
                     self.app.paste(&text);
                 }
             }
-            _ => return false,
         }
-        true
+    }
+
+    /// Opens a right-click menu of `entries` at `position`, in place of any open one.
+    fn open_menu(&mut self, position: Point<Pixels>, entries: Vec<menu::Entry>, cx: &mut Context<Self>) {
+        self.menu = Some(menu::ContextMenu::new(position, entries));
+        cx.stop_propagation();
+        self.after_input(cx);
+    }
+
+    /// A picked menu entry: the menu closes, then it runs.
+    fn run_menu(&mut self, run: menu::Run, cx: &mut Context<Self>) {
+        self.menu = None;
+        match run {
+            menu::Run::Key(key) => self.press(None, key, cx),
+            menu::Run::Clipboard(op) => {
+                self.clipboard_op(op, cx);
+                self.follow = true;
+                self.after_input(cx);
+            }
+        }
     }
 
     /// A button: first `click` (e.g. selecting the comment the button belongs to), then its action's key.
@@ -240,6 +282,19 @@ impl TaskerView {
     fn share_selection(&mut self, _: &mut Context<Self>) {}
 }
 
+/// An edit through the clipboard, from a shortcut or a right-click menu.
+#[derive(Debug, Clone, Copy)]
+enum ClipboardOp {
+    /// Select all.
+    SelectAll,
+    /// Copy the selection.
+    Copy,
+    /// Cut the selection.
+    Cut,
+    /// Paste over the selection.
+    Paste,
+}
+
 impl Render for TaskerView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let follow = std::mem::take(&mut self.follow);
@@ -264,6 +319,7 @@ impl Render for TaskerView {
             .child(div().flex_1().min_h_0().flex().flex_col().child(screen))
             .child(status_bar(app))
             .children(dialogs::draw(app, &self.scroll, follow, cx))
+            .children(self.menu.as_ref().map(|m| menu::draw(m, cx)))
     }
 }
 

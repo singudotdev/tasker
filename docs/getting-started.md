@@ -179,7 +179,8 @@ tasker
 Press `?` at any time to see all the keys.
 
 In the desktop app (`tasker-gui`) it's all buttons: **+ New task** in the toolbar, then the status buttons
-(To do, Doing, Parked, Done) and the Edit / Add buttons in the details panel. Double-click a task to open it.
+(To do, Doing, Parked, Done) and the Edit / Add buttons in the details panel. Double-click a task to open it,
+or right-click it for a menu of its actions.
 The same keys work too, and every button's tooltip names its key.
 
 ## Where your data lives

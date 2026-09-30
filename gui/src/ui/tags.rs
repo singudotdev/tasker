@@ -3,8 +3,11 @@
 
 use super::theme::{self, BORDER, DIM};
 use super::widgets::{Kind, card, dim, small, tag_chip};
-use super::{TaskerView, action, action_after};
-use gpui::{AnyElement, ClickEvent, Context, Div, FontWeight, ScrollHandle, div, prelude::*, px, rgb};
+use super::{TaskerView, action, action_after, menu};
+use gpui::{
+    AnyElement, ClickEvent, Context, Div, FontWeight, MouseButton, MouseDownEvent, ScrollHandle, div, prelude::*, px,
+    rgb,
+};
 use tasker_core::app::{App, Back, Click, Confirm, KeysMenu, Mode, TagsView};
 use tasker_core::event::{KeyCode, KeyEvent, KeyModifiers};
 use tasker_core::model::Status;
@@ -101,6 +104,13 @@ pub fn draw(
                 .when(index == sel, |d| d.bg(rgb(theme::SELECTED)))
                 .when(index != sel, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.click(Click::Tag(index), cx)))
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                        this.app.click(Click::Tag(index));
+                        this.open_menu(event.position, menu::for_tag(), cx);
+                    }),
+                )
                 .child(div().w(px(TAG_WIDTH)).flex_none().flex().child(tag_chip(app, tag)))
                 .child(color)
                 .children(counts)

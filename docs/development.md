@@ -138,12 +138,13 @@ gui/src/             tasker-gui: the desktop app
     ├── mod.rs       the root view, status bar, buttons that run an action (`action`), GPUI keystrokes → core keys, clipboard shortcuts
     ├── widgets.rs   buttons, segmented controls, text fields, status pills, tag chips, cards, tooltips
     ├── pointer.rs   the mouse in text fields and the editor: place the cursor, drag to select, double/triple-click
+    ├── menu.rs      right-click menus for tasks, comments, tags and text
     ├── theme.rs     colors, fonts, and styled text (`Line` / `Span`)
     ├── list.rs      toolbar (new, search, filters), task table, details panel
     ├── issue.rs     task view: status, description, history, comment cards
     ├── tags.rs      tags screen with color, rename and delete buttons
     ├── dialogs.rs   form, delete confirmations, keyboard shortcuts, text editor, rename tag
-    └── tests.rs     keystroke translation, keys reaching the app, clipboard shortcuts, the mouse in fields
+    └── tests.rs     keystroke translation, keys reaching the app, clipboard shortcuts, the mouse in fields, right-click menus
 ```
 
 ### Data flow
@@ -186,6 +187,8 @@ every 500 ms / after each input ──▶ each app's ui draws &App   ("since" ag
   listeners, so they keep selecting outside the field; `TaskerView::drag` names the field. The core editors remember
   a double- or triple-clicked word or line (`Grab`), so dragging on extends by whole words or lines. On Linux,
   `TaskerView::share_selection` copies the selection to the primary selection after each input.
+- **Right-click menus (desktop):** `ui::menu`. A right-click first selects its target (`App::click`); entries run a key
+  through `TaskerView::press` or a `ClipboardOp`, so a menu can't do anything a button or key can't.
 
 ### Adding a key
 
@@ -220,7 +223,7 @@ button presses and clicks against a temporary data folder.
 | `cli` | commands, list options and output |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
 | `ui` (tui) | wrapping, truncation, popup placement |
-| `ui` (gui) | GPUI keystrokes to core keys, shortcut names for tooltips, typed keys, clipboard shortcuts, drag selection and middle-click paste (Linux) in a real (test) window |
+| `ui` (gui) | GPUI keystrokes to core keys, shortcut names for tooltips, typed keys, clipboard shortcuts, drag selection, right-click menus and middle-click paste (Linux) in a real (test) window |
 
 To check the UI by hand, run it in `tmux` against a scratch folder and capture the screen:
 

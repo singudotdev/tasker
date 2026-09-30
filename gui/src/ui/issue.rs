@@ -4,8 +4,11 @@
 use super::list::{divider, paragraph, status_block};
 use super::theme::{self, ACCENT, BORDER, DIM};
 use super::widgets::{Kind, card, dim, section, small, status_pill, tag_chips};
-use super::{TaskerView, action, action_after, history_line, when};
-use gpui::{AnyElement, ClickEvent, Context, Div, FontWeight, ScrollHandle, Stateful, div, prelude::*, px, rgb};
+use super::{TaskerView, action, action_after, history_line, menu, when};
+use gpui::{
+    AnyElement, ClickEvent, Context, Div, FontWeight, MouseButton, MouseDownEvent, ScrollHandle, Stateful, div,
+    prelude::*, px, rgb,
+};
 use tasker_core::app::{App, Back, Click, Confirm, Edit, IssueView, KeysMenu, Mode};
 use tasker_core::event::{KeyCode, KeyEvent, KeyModifiers};
 use tasker_core::model::{Comment, fmt_age, now};
@@ -136,7 +139,8 @@ pub fn draw(
     div().flex_1().min_h_0().flex().flex_col().child(bar).child(content).into_any_element()
 }
 
-/// A comment card: date, edited, Edit and Delete buttons, and the text. Clicking it selects it.
+/// A comment card: date, edited, Edit and Delete buttons, and the text. Clicking it selects it;
+/// right-clicking also opens a menu with Edit and Delete.
 fn draw_comment(comment: &Comment, index: usize, selected: bool, cx: &mut Context<TaskerView>) -> Stateful<Div> {
     let mut header = vec![when(comment.created)];
     if let Some(edited) = comment.edited {
@@ -156,6 +160,13 @@ fn draw_comment(comment: &Comment, index: usize, selected: bool, cx: &mut Contex
         .gap_2()
         .when(selected, |d| d.border_color(rgb(ACCENT)))
         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.click(Click::Comment(index), cx)))
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                this.app.click(Click::Comment(index));
+                this.open_menu(event.position, menu::for_comment(), cx);
+            }),
+        )
         .child(
             div()
                 .flex()
