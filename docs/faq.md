@@ -25,8 +25,8 @@ tasker doesn't modify those files. Fix them or move them out of the folder, then
 tasker uses the mouse (wheel, click), like lazygit, so the terminal passes mouse events to it.
 Hold `shift` while dragging to select text; on macOS use `fn` or `option`, depending on the terminal.
 
-In the desktop app, dragging doesn't select text yet: in a field or the editor, select with `shift` and the arrows or
-`ctrl+a`, then copy with `ctrl+c` (see [Keybindings](keybindings.md)).
+The desktop app selects text as any desktop app does: drag, `shift`+click, or double-click in a field or the editor,
+then copy with `ctrl+c` (see [Mouse](keybindings.md#mouse)).
 
 ### Icons (`▶ · ‖ ✓`) show as boxes
 

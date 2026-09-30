@@ -108,7 +108,7 @@ core/src/            tasker-core: shared by both apps
 │   ├── mod.rs       App: tasks, selection, status message, loading, queries
 │   ├── mode.rs      the screens and dialogs (Mode) and the state each needs
 │   ├── actions.rs   operations: status changes, create, delete, descriptions, comments, tags
-│   ├── input.rs     keys → actions; the wheel; buttons (`press`) and other clicks (`Click`); select all, copy, cut, paste
+│   ├── input.rs     keys → actions; the wheel; buttons (`press`) and other clicks (`Click`); select all, copy, cut, paste; the mouse in text (`point`)
 │   └── tests.rs     behaviour tests driven by key presses and clicks
 ├── model/           the domain
 │   ├── mod.rs       Task, Status, StatusChange, Comment
@@ -137,12 +137,13 @@ gui/src/             tasker-gui: the desktop app
 └── ui/              the window: draws App with GPUI and turns clicks and keys into the core's input
     ├── mod.rs       the root view, status bar, buttons that run an action (`action`), GPUI keystrokes → core keys, clipboard shortcuts
     ├── widgets.rs   buttons, segmented controls, text fields, status pills, tag chips, cards, tooltips
+    ├── pointer.rs   the mouse in text fields and the editor: place the cursor, drag to select, double/triple-click
     ├── theme.rs     colors, fonts, and styled text (`Line` / `Span`)
     ├── list.rs      toolbar (new, search, filters), task table, details panel
     ├── issue.rs     task view: status, description, history, comment cards
     ├── tags.rs      tags screen with color, rename and delete buttons
     ├── dialogs.rs   form, delete confirmations, keyboard shortcuts, text editor, rename tag
-    └── tests.rs     keystroke translation, keys reaching the app, clipboard shortcuts
+    └── tests.rs     keystroke translation, keys reaching the app, clipboard shortcuts, the mouse in fields
 ```
 
 ### Data flow
@@ -179,7 +180,12 @@ every 500 ms / after each input ──▶ each app's ui draws &App   ("since" ag
   A left click selects a row: `ui::list` records where the list was drawn and its scroll offset (`ui::ListArea`), and
   `tui.rs` maps the click to `Click::Row`. Mouse capture is released around `$EDITOR` and in the panic hook.
 - **Mouse on the desktop:** the wheel scrolls normally; the selection is scrolled into view only after the keyboard or
-  a button moved it. Double-clicking a row is `Click::OpenRow`.
+  a button moved it. Double-clicking a row is `Click::OpenRow`, and clicking a `?` menu entry is `Click::Binding`.
+- **Mouse in text (desktop):** `ui::pointer` keeps each drawn line's GPUI `TextLayout` (`Hit`) to map the mouse to a
+  character, and calls `App::point` with an `editor::Pointer` (place, extend, word, line). Drags use window-wide
+  listeners, so they keep selecting outside the field; `TaskerView::drag` names the field. The core editors remember
+  a double- or triple-clicked word or line (`Grab`), so dragging on extends by whole words or lines. On Linux,
+  `TaskerView::share_selection` copies the selection to the primary selection after each input.
 
 ### Adding a key
 
@@ -205,16 +211,16 @@ button presses and clicks against a temporary data folder.
 
 | module | covers |
 | --- | --- |
-| `app` | status keys and history, new tasks as todo, delete confirmation, comments add/edit/delete, `ctrl+c`, clipboard (select all, copy, cut, paste), unlisted keys do nothing and listed keys do something, search, tag rename/merge/delete/recolor, buttons leaving the search box, clicks selecting, opening, filtering and focusing fields, row buttons acting on their own row |
+| `app` | status keys and history, new tasks as todo, delete confirmation, comments add/edit/delete, `ctrl+c`, clipboard (select all, copy, cut, paste), unlisted keys do nothing and listed keys do something, search, tag rename/merge/delete/recolor, buttons leaving the search box, clicks selecting, opening, filtering, focusing fields and running `?` entries, row buttons acting on their own row, mouse selection |
 | `model` | file round trip, hand-typed history, missing id, status changes recorded once, search matching, tags, slugs, heading rules, timestamps, ages |
 | `store` | renaming on title change, unreadable files become warnings, `tags.md` isn't a task |
 | `tags` | no color repeats until the palette is used up, `tags.md` round trip, custom colors, rename/remove/cycle |
-| `editor` | line editing (split/join), unicode, wrapping and scrolling; one-line cursor editing and horizontal scroll; selecting, copying and replacing a selection in both |
+| `editor` | line editing (split/join), unicode, wrapping and scrolling; one-line cursor editing and horizontal scroll; selecting, copying and replacing a selection in both; mouse selection by character, word and line |
 | `keys` | mnemonic hint splitting |
 | `cli` | commands, list options and output |
 | `enums` | generated `ALL` / `position` / `next`, `parse` as the inverse of `as_str` |
 | `ui` (tui) | wrapping, truncation, popup placement |
-| `ui` (gui) | GPUI keystrokes to core keys, shortcut names for tooltips, typed keys and clipboard shortcuts reaching the app in a real (test) window |
+| `ui` (gui) | GPUI keystrokes to core keys, shortcut names for tooltips, typed keys, clipboard shortcuts, drag selection and middle-click paste (Linux) in a real (test) window |
 
 To check the UI by hand, run it in `tmux` against a scratch folder and capture the screen:
 

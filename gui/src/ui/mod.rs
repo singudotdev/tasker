@@ -7,11 +7,13 @@
 //! - [`tags`]: the tags screen.
 //! - [`dialogs`]: dialogs drawn over the current screen.
 //! - [`widgets`]: buttons, fields, pills and chips.
+//! - [`mod@pointer`]: the mouse in text fields and the text editor.
 //! - [`theme`]: colors, fonts and styled text.
 
 mod dialogs;
 mod issue;
 mod list;
+mod pointer;
 mod tags;
 mod theme;
 mod widgets;
@@ -20,7 +22,8 @@ use anyhow::{Context as _, Result, bail};
 use chrono::{DateTime, Local};
 use gpui::{
     App as GpuiApp, Bounds, ClickEvent, ClipboardItem, Context, Div, ElementId, FocusHandle, KeyDownEvent, Keystroke,
-    ScrollHandle, SharedString, Stateful, Window, WindowBounds, WindowOptions, div, prelude::*, px, rgb, size,
+    MouseButton, MouseDownEvent, NavigationDirection, ScrollHandle, SharedString, Stateful, Window, WindowBounds,
+    WindowOptions, div, prelude::*, px, rgb, size,
 };
 use std::path::Path;
 use std::process::Command;
@@ -68,6 +71,11 @@ struct TaskerView {
     /// Whether the next frame scrolls the selection into view: after the keyboard or a button moved it,
     /// but not on every frame, so the wheel can scroll freely.
     follow: bool,
+    /// The field or editor a mouse drag that selects text started in, while the button is down.
+    drag: Option<pointer::TextBox>,
+    /// The text last put in the primary selection, so it's only replaced when the selection changes.
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    shared: Option<String>,
     /// Redraws every `TICK`; dropped with the view.
     _tick: gpui::Task<()>,
 }
@@ -102,7 +110,16 @@ impl TaskerView {
                 }
             }
         });
-        Self { app, focus, scroll: Scrolls::default(), follow: true, _tick: tick }
+        Self {
+            app,
+            focus,
+            scroll: Scrolls::default(),
+            follow: true,
+            drag: None,
+            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+            shared: None,
+            _tick: tick,
+        }
     }
 
     /// A key press: a clipboard shortcut, or handed to the app as the terminal version would receive it.
@@ -166,18 +183,27 @@ impl TaskerView {
         self.after_input(cx);
     }
 
+    /// The mouse's back button leaves the task view and the tags screen, as `esc` does.
+    /// Dialogs cover the whole window, so it doesn't reach here while one is open.
+    fn on_back_button(&mut self, _: &MouseDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        if matches!(self.app.mode, Mode::Issue(_) | Mode::Tags(_)) {
+            self.press(None, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), cx);
+        }
+    }
+
     /// A click that selects or focuses something.
     fn click(&mut self, click: Click, cx: &mut Context<Self>) {
         self.app.click(click);
         self.after_input(cx);
     }
 
-    /// Quits when the app asked to, runs a requested `$EDITOR`, and redraws.
+    /// Quits when the app asked to, runs a requested `$EDITOR`, shares the selected text, and redraws.
     fn after_input(&mut self, cx: &mut Context<Self>) {
         if self.app.quit {
             cx.quit();
             return;
         }
+        self.share_selection(cx);
         // "Open file" asked for an external editor: run it, and re-read the files when it exits
         // since the user may have changed anything.
         if let Some(path) = self.app.edit_request.take() {
@@ -198,6 +224,22 @@ impl TaskerView {
     }
 }
 
+impl TaskerView {
+    /// Puts selected text in the primary selection, as Linux desktops do, for a middle-click to paste elsewhere.
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    fn share_selection(&mut self, cx: &mut Context<Self>) {
+        let Some(text) = self.app.selected_text() else { return };
+        if self.shared.as_ref() != Some(&text) {
+            cx.write_to_primary(ClipboardItem::new_string(text.clone()));
+            self.shared = Some(text);
+        }
+    }
+
+    /// Only Linux desktops have a primary selection.
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    fn share_selection(&mut self, _: &mut Context<Self>) {}
+}
+
 impl Render for TaskerView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let follow = std::mem::take(&mut self.follow);
@@ -210,6 +252,7 @@ impl Render for TaskerView {
         div()
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key_down))
+            .on_mouse_down(MouseButton::Navigate(NavigationDirection::Back), cx.listener(Self::on_back_button))
             .relative()
             .size_full()
             .flex()

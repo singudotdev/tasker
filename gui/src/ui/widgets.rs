@@ -1,10 +1,11 @@
 //! Building blocks shared by the screens: buttons, text fields, status pills, tag chips, cards and tooltips.
 
-use super::edited;
+use super::pointer::{Hit, TextBox, pointable};
 use super::theme::{self, ACCENT, BORDER, DIM, INPUT, Line, Span, Style, TEXT};
+use super::{TaskerView, edited};
 use gpui::{
-    AnyView, App as GpuiApp, Div, ElementId, FontWeight, SharedString, Stateful, Window, div, prelude::*, px, rgb,
-    rgba, transparent_black,
+    AnyView, App as GpuiApp, Context, Div, ElementId, FontWeight, SharedString, Stateful, Window, div, prelude::*, px,
+    rgb, rgba, transparent_black,
 };
 use tasker_core::app::App;
 use tasker_core::editor::LineInput;
@@ -90,7 +91,14 @@ pub fn segmented(segments: impl IntoIterator<Item = Stateful<Div>>) -> Div {
 }
 
 /// A one-line text field: the text with its cursor while `active`, else the text or `placeholder`.
-pub fn text_field(id: impl Into<ElementId>, input: &LineInput, active: bool, placeholder: &str) -> Stateful<Div> {
+/// The mouse places the cursor and selects, and first makes it the field being typed into.
+pub fn text_field(
+    which: TextBox,
+    input: &LineInput,
+    active: bool,
+    placeholder: &str,
+    cx: &mut Context<TaskerView>,
+) -> Stateful<Div> {
     let content = if active {
         Line::from(edited(input.text(), Some(input.cursor()), input.selection()))
     } else if input.is_empty() {
@@ -98,8 +106,10 @@ pub fn text_field(id: impl Into<ElementId>, input: &LineInput, active: bool, pla
     } else {
         Line::raw(input.text())
     };
-    div()
-        .id(id)
+    let text = content.render();
+    let hit = Hit::new(&text, active.then(|| input.cursor()), input.text().chars().count());
+    let field = div()
+        .id(which.id())
         .flex()
         .items_center()
         .h(px(32.))
@@ -110,8 +120,9 @@ pub fn text_field(id: impl Into<ElementId>, input: &LineInput, active: bool, pla
         .border_color(rgb(if active { ACCENT } else { BORDER }))
         .whitespace_nowrap()
         .overflow_hidden()
-        .cursor_text()
-        .child(content.render())
+        .debug_selector(|| which.id().to_string())
+        .child(text);
+    pointable(field, which, vec![hit], cx)
 }
 
 /// A task's status as a small colored label.

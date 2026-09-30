@@ -17,7 +17,7 @@ search box isn't selected runs its action (e.g. `d` marks the selected task done
 
 In the desktop app's text fields and editor, `ctrl+a` selects all, `ctrl+c` / `ctrl+x` / `ctrl+v` copy, cut and paste with the
 system clipboard (`cmd` on macOS), and `shift` with the arrows, `home` or `end` selects text. Typing or pasting replaces
-the selection. In the terminal, copy and paste are the terminal's own.
+the selection. For the mouse, see [Mouse](#mouse). In the terminal, copy and paste are the terminal's own.
 
 ## Task list
 
@@ -128,9 +128,23 @@ In the rename dialog, edit the name (`←` `→` / `home` `end` move the cursor,
 
 ## Mouse
 
+**Terminal**
+
 | action | effect |
 | --- | --- |
 | wheel | move the selection in the task list, task view, tags screen and keys menu |
 | left click | select a task in the list |
 
 tasker captures the mouse. To select text in the terminal, hold `shift` (on macOS: `fn` or `option`, depending on the terminal) while dragging.
+
+**Desktop app**: every action has a button; the mouse also does the following.
+
+| action | effect |
+| --- | --- |
+| double-click a task | open it |
+| click a `?` shortcut | run it |
+| back button | leave the task view or the tags screen |
+| click in text | place the cursor |
+| drag, `shift`+click | select |
+| double-click / triple-click in text | select a word / the line; dragging on extends by words / lines |
+| middle-click in text (Linux) | paste the primary selection (the text last selected, in any app) |

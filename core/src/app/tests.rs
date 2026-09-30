@@ -1,6 +1,7 @@
 //! Behaviour tests: drive the app with key presses against a temporary data folder.
 
 use super::*;
+use crate::editor::Pointer;
 use crate::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::model::{Status, now};
 use crate::store::Store;
@@ -435,4 +436,32 @@ fn clipboard_edits_the_field_being_typed_into() {
     assert_eq!(f.app.selected_text().as_deref(), Some("line one\nline two"));
     f.press(KeyCode::Esc);
     assert_eq!(f.task(1).description, "line one\nline two");
+}
+
+#[test]
+fn the_mouse_selects_in_the_field_being_typed_into() {
+    let mut f = Fixture::with_titles(&["a"]);
+    f.press(KeyCode::Char('n'));
+    f.type_text("fix login");
+    f.app.point(0, 5, Pointer::Word);
+    f.type_text("signup");
+    f.app.click(Click::Field(Field::Tags));
+    f.type_text("prod");
+    f.app.point(0, 0, Pointer::Place);
+    f.type_text("ops ");
+    f.press(KeyCode::Enter);
+    assert_eq!(
+        (f.task(2).title.as_str(), f.task(2).tags.as_slice()),
+        ("fix signup", ["ops", "prod"].map(String::from).as_slice())
+    );
+}
+
+#[test]
+fn clicking_a_shortcut_runs_it() {
+    let mut f = Fixture::with_titles(&["a"]);
+    f.press(KeyCode::Char('?'));
+    let Mode::Keys(menu) = &f.app.mode else { panic!("{:?}", f.app.mode) };
+    let new = menu.bindings().iter().position(|b| b.code == KeyCode::Char('n')).unwrap();
+    f.app.click(Click::Binding(new));
+    assert!(matches!(f.app.mode, Mode::Input(_)), "{:?}", f.app.mode);
 }

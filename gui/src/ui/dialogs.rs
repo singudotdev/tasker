@@ -1,6 +1,7 @@
 //! Dialogs drawn over the current screen: the create/edit form, delete confirmations,
 //! the keyboard shortcuts, the text editor and renaming a tag. Each has its buttons at the bottom.
 
+use super::pointer::{Hit, TextBox, pointable};
 use super::theme::{self, ACCENT, BORDER, DIM_STYLE, Line, Span, Style};
 use super::widgets::{Kind, button, dim, tag_chip, tag_chips, tag_span, text_field};
 use super::{Scrolls, TaskerView, action, edited, truncate, when};
@@ -76,21 +77,20 @@ fn draw_form(app: &App, form: &Form, cx: &mut Context<TaskerView>) -> Div {
         InputKind::New => ("New task", "Create task"),
         InputKind::Edit(_) => ("Edit task", "Save"),
     };
-    let field = |id: &'static str, which: Field, placeholder: &str, cx: &mut Context<TaskerView>| {
-        let input = match which {
-            Field::Title => &form.title,
-            Field::Tags => &form.tags,
+    let field = |which: Field, placeholder: &str, cx: &mut Context<TaskerView>| {
+        let (input, text_box) = match which {
+            Field::Title => (&form.title, TextBox::Title),
+            Field::Tags => (&form.tags, TextBox::Tags),
         };
-        text_field(id, input, form.field == which, placeholder)
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.click(Click::Field(which), cx)))
+        text_field(text_box, input, form.field == which, placeholder, cx)
     };
     let known = app.all_tags();
     let content = div()
         .flex()
         .flex_col()
         .gap_3()
-        .child(labeled("Title", field("title", Field::Title, "What needs doing?", cx)))
-        .child(labeled("Tags", field("tags", Field::Tags, "e.g. prod, support", cx)))
+        .child(labeled("Title", field(Field::Title, "What needs doing?", cx)))
+        .child(labeled("Tags", field(Field::Tags, "e.g. prod, support", cx)))
         .child(dim("Separate tags with commas or spaces.").text_size(px(12.)))
         .when(!known.is_empty(), |d| {
             d.child(
@@ -153,7 +153,7 @@ fn question(task: &Task) -> Line {
     Line::from(vec![Span::styled(format!("#{} {}", task.id, task.title), Style::new().bold())])
 }
 
-/// Every keyboard shortcut of the screen it was opened from; enter runs the highlighted one.
+/// Every keyboard shortcut of the screen it was opened from; enter or a click runs one.
 fn draw_keys(menu: &KeysMenu, scroll: &ScrollHandle, follow: bool, cx: &mut Context<TaskerView>) -> Div {
     let title = match menu.back {
         Back::List => "Keyboard shortcuts · task list",
@@ -166,13 +166,20 @@ fn draw_keys(menu: &KeysMenu, scroll: &ScrollHandle, follow: bool, cx: &mut Cont
     let bindings = menu.bindings();
     let items = bindings.iter().enumerate().map(|(index, b)| {
         div()
+            .id(("binding", index))
             .flex()
             .items_center()
             .gap_3()
             .px_2()
             .py_1()
             .rounded_sm()
+            .cursor_pointer()
             .when(index == menu.sel, |d| d.bg(rgb(theme::SELECTED)))
+            .when(index != menu.sel, |d| d.hover(|s| s.bg(rgb(theme::HOVER))))
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.follow = true;
+                this.click(Click::Binding(index), cx);
+            }))
             .child(
                 div().w(px(64.)).flex_none().flex().child(
                     div()
@@ -212,21 +219,26 @@ fn draw_editor(app: &App, edit: &Edit, scroll: &ScrollHandle, follow: bool, cx: 
         scroll.scroll_to_item(row);
     }
     let selection = edit.editor.selection();
-    let lines = edit.editor.lines().iter().enumerate().map(|(index, line)| {
+    let mut lines = Vec::with_capacity(edit.editor.lines().len());
+    let mut hits = Vec::with_capacity(lines.capacity());
+    for (index, line) in edit.editor.lines().iter().enumerate() {
         // The part of this line inside the selection, if any.
         let selected = selection.and_then(|((r1, c1), (r2, c2))| {
             let len = line.chars().count();
             (r1..=r2).contains(&index).then_some((if index == r1 { c1 } else { 0 }, if index == r2 { c2 } else { len }))
         });
-        let line = if index == row || selected.is_some() {
-            Line::from(edited(line, (index == row).then_some(col), selected))
+        let caret = (index == row).then_some(col);
+        let text = if caret.is_some() || selected.is_some() {
+            Line::from(edited(line, caret, selected))
         } else {
             Line::raw(line.clone())
-        };
-        div().child(line.render())
-    });
+        }
+        .render();
+        hits.push(Hit::new(&text, caret, line.chars().count()));
+        lines.push(div().child(text));
+    }
     let text = div()
-        .id("editor")
+        .id(TextBox::Editor.id())
         .flex_1()
         .min_h(px(160.))
         .overflow_y_scroll()
@@ -239,6 +251,7 @@ fn draw_editor(app: &App, edit: &Edit, scroll: &ScrollHandle, follow: bool, cx: 
         .font_family(theme::EDITOR_FONT)
         .text_size(px(13.))
         .children(lines);
+    let text = pointable(text, TextBox::Editor, hits, cx);
     let content = div()
         .flex_1()
         .min_h_0()
@@ -266,7 +279,7 @@ fn draw_rename_tag(app: &App, rename: &RenameTag, cx: &mut Context<TaskerView>) 
         .flex_col()
         .gap_3()
         .child(labeled("Current name", div().flex().child(tag_chip(app, &from))))
-        .child(labeled("New name", text_field("rename", &rename.name, true, "")))
+        .child(labeled("New name", text_field(TextBox::Rename, &rename.name, true, "", cx)))
         .child(dim("Renamed on every task. A name already in use merges the two tags.").text_size(px(12.)));
     let buttons = vec![
         action("cancel", "Cancel", Kind::Secondary, KeyCode::Esc, cx),

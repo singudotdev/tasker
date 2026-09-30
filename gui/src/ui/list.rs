@@ -1,6 +1,7 @@
 //! The main screen: a toolbar (new task, search, filters), the task list, and a details panel
 //! with the selected task's status, actions, description, comments and history.
 
+use super::pointer::TextBox;
 use super::theme::{self, BORDER, DIM, Line, TEXT};
 use super::widgets::{self, Kind, card, dim, section, segment, segmented, small, status_pill, tag_chips};
 use super::{Scrolls, TaskerView, action, history_line, when};
@@ -47,9 +48,7 @@ pub fn draw(app: &App, window: &Window, scroll: &Scrolls, follow: bool, cx: &mut
 /// New task, the search box, the filters, and the tags / reload / shortcuts buttons.
 fn toolbar(app: &App, cx: &mut Context<TaskerView>) -> Div {
     let searching = matches!(app.mode, Mode::Search);
-    let search = widgets::text_field("search", &app.search, searching, "Search tasks, or #tag")
-        .w(px(260.))
-        .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.click(Click::Search, cx)));
+    let search = widgets::text_field(TextBox::Search, &app.search, searching, "Search tasks, or #tag", cx).w(px(260.));
     let clear = (!app.search.is_empty()).then(|| {
         let matches = app.visible().len();
         div()

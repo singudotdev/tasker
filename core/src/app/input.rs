@@ -6,7 +6,7 @@ use super::App;
 use super::mode::{
     Back, Confirm, DoneView, Field, Form, InputKind, IssueView, KeysMenu, Mode, RenameTag, TagsView, Target,
 };
-use crate::editor::{LineInput, Outcome, TextEditor};
+use crate::editor::{LineInput, Outcome, Pointer, TextEditor};
 use crate::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::model::{Status, parse_tags};
 use anyhow::Result;
@@ -28,6 +28,8 @@ pub enum Click {
     Search,
     /// A list filter: shows those tasks.
     DoneView(DoneView),
+    /// An entry of the keyboard shortcuts menu: runs it.
+    Binding(usize),
 }
 
 impl App {
@@ -106,7 +108,21 @@ impl App {
                 self.done_view = view;
                 self.selected = 0;
             }
+            (Click::Binding(index), Mode::Keys(menu)) if index < menu.bindings().len() => {
+                menu.sel = index;
+                self.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+            }
             _ => {}
+        }
+    }
+
+    /// A mouse press or drag in the field or editor being typed into, at character `col` of line `row`
+    /// (one-line fields have only row 0).
+    pub fn point(&mut self, row: usize, col: usize, how: Pointer) {
+        match self.typing() {
+            Some(Typing::Line(input)) => input.point(col, how),
+            Some(Typing::Text(editor)) => editor.point((row, col), how),
+            None => {}
         }
     }
 

@@ -71,3 +71,43 @@ fn clipboard_shortcuts_copy_cut_and_paste(cx: &mut gpui::TestAppContext) {
         assert_eq!(titles, ["abab"]);
     });
 }
+
+#[gpui::test]
+fn dragging_across_a_field_selects_its_text(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let app = App::new(Store::at(dir.path()).unwrap()).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| TaskerView::new(app, window, cx));
+    cx.simulate_keystrokes("n a b c tab");
+    let field = cx.debug_bounds("title").expect("the title field is drawn");
+    // Just inside the field, left of its text (the padding); the drag ends beyond its right edge.
+    let start = field.left_center() + gpui::point(px(2.), px(0.));
+    let outside = field.right_center() + gpui::point(px(200.), px(0.));
+    let none = gpui::Modifiers::none();
+    // Pressing makes it the field being typed into.
+    cx.simulate_mouse_down(start, MouseButton::Left, none);
+    cx.simulate_mouse_move(outside, MouseButton::Left, none);
+    cx.simulate_mouse_up(outside, MouseButton::Left, none);
+    cx.simulate_keystrokes("x enter");
+    view.read_with(cx, |view, _| {
+        let titles: Vec<&str> = view.app.tasks.iter().map(|t| t.title.as_str()).collect();
+        assert_eq!(titles, ["x"]);
+    });
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[gpui::test]
+fn selected_text_is_shared_and_middle_click_pastes_it(cx: &mut gpui::TestAppContext) {
+    let dir = tempfile::tempdir().unwrap();
+    let app = App::new(Store::at(dir.path()).unwrap()).unwrap();
+    let (view, cx) = cx.add_window_view(|window, cx| TaskerView::new(app, window, cx));
+    cx.simulate_keystrokes("n o p s shift-left shift-left");
+    let shared = cx.update(|_, cx| cx.read_from_primary()).and_then(|item| item.text());
+    assert_eq!(shared.as_deref(), Some("ps"));
+    let tags = cx.debug_bounds("tags").expect("the tags field is drawn");
+    cx.simulate_mouse_down(tags.center(), MouseButton::Middle, gpui::Modifiers::none());
+    cx.simulate_mouse_up(tags.center(), MouseButton::Middle, gpui::Modifiers::none());
+    view.read_with(cx, |view, _| {
+        let Mode::Input(form) = &view.app.mode else { panic!("{:?}", view.app.mode) };
+        assert_eq!((form.title.text(), form.tags.text()), ("ops", "ps"));
+    });
+}

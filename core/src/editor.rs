@@ -2,8 +2,8 @@
 //! - [`TextEditor`]: multi-line (task descriptions and comments): insert, delete, move, soft wrap.
 //! - [`LineInput`]: one line (titles, tags, tag names, search): insert, delete, move, horizontal scroll.
 //!
-//! Moving with shift held, or `select_all`, selects text (only the desktop app does either); typing or
-//! pasting replaces the selection, and `backspace`/`delete` erase it.
+//! Moving with shift held, `select_all`, or the mouse (`point`) selects text (only the desktop app does any);
+//! typing or pasting replaces the selection, and `backspace`/`delete` erase it.
 
 use crate::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::cell::Cell;
@@ -19,10 +19,25 @@ pub struct TextEditor {
     col: usize,
     /// Where the selection started, as (line, column); it runs to the cursor. `None` when nothing is selected.
     anchor: Option<(usize, usize)>,
+    /// The word or line a double- or triple-click selected, while a drag or shift+click can still grow it.
+    grab: Option<Grab<(usize, usize)>>,
     /// First visible display row; kept in view by `layout`.
     scroll: Cell<usize>,
     /// Whether the text changed since the editor opened.
     pub modified: bool,
+}
+
+/// What a mouse press or drag does at a position in the text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pointer {
+    /// A click: moves the cursor there and drops the selection.
+    Place,
+    /// A drag or shift+click: selects from where the selection started, or the cursor, to there.
+    Extend,
+    /// A double-click: selects the word there.
+    Word,
+    /// A triple-click: selects the line there (all of a one-line input).
+    Line,
 }
 
 /// What a key press means for the editor's owner.
@@ -44,7 +59,7 @@ impl TextEditor {
         // Start at the end, ready to append.
         let row = lines.len() - 1;
         let col = lines[row].chars().count();
-        Self { lines, row, col, anchor: None, scroll: Cell::new(0), modified: false }
+        Self { lines, row, col, anchor: None, grab: None, scroll: Cell::new(0), modified: false }
     }
 
     /// The text, without trailing whitespace.
@@ -111,6 +126,7 @@ impl TextEditor {
     /// Without, `←`/`→` over a selection go to its start/end, and any move drops it.
     fn move_cursor(&mut self, code: KeyCode, select: bool) {
         let selection = self.selection();
+        self.grab = None;
         self.anchor = if select { self.anchor.or(Some((self.row, self.col))) } else { None };
         match (code, selection) {
             (KeyCode::Left, Some((start, _))) if !select => (self.row, self.col) = start,
@@ -173,9 +189,43 @@ impl TextEditor {
 
     /// Selects the whole text, the cursor at its end.
     pub fn select_all(&mut self) {
+        self.grab = None;
         self.anchor = Some((0, 0));
         self.row = self.lines.len() - 1;
         self.col = self.line_len(self.row);
+    }
+
+    /// A mouse press or drag at `(row, col)`; positions past the end of a line or the text mean its end.
+    pub fn point(&mut self, (row, col): (usize, usize), how: Pointer) {
+        let row = row.min(self.lines.len() - 1);
+        let col = col.min(self.line_len(row));
+        let unit = |by| match by {
+            Pointer::Word => {
+                let (start, end) = word_at(&self.lines[row], col);
+                ((row, start), (row, end))
+            }
+            _ => ((row, 0), (row, self.line_len(row))),
+        };
+        let (anchor, cursor) = match (how, self.grab) {
+            (Pointer::Place, _) => (None, (row, col)),
+            (Pointer::Extend, Some(grab)) => {
+                let (anchor, cursor) = grab.grow(unit(grab.by));
+                (Some(anchor), cursor)
+            }
+            (Pointer::Extend, None) => (self.anchor.or(Some((self.row, self.col))), (row, col)),
+            (by @ (Pointer::Word | Pointer::Line), _) => {
+                let (start, end) = unit(by);
+                self.anchor = Some(start);
+                (self.row, self.col) = end;
+                self.grab = Some(Grab { by, start, end });
+                return;
+            }
+        };
+        if how == Pointer::Place {
+            self.grab = None;
+        }
+        self.anchor = anchor;
+        (self.row, self.col) = cursor;
     }
 
     /// The selection as (start, end), each a (line, column), start first; `None` when nothing is selected.
@@ -202,6 +252,7 @@ impl TextEditor {
 
     /// Removes the selected text, leaving the cursor where it started. Returns whether there was a selection.
     pub fn delete_selection(&mut self) -> bool {
+        self.grab = None;
         let Some(((r1, c1), (r2, c2))) = self.selection() else {
             self.anchor = None;
             return false;
@@ -277,12 +328,14 @@ pub struct LineInput {
     cursor: usize,
     /// Where the selection started, in characters; it runs to the cursor. `None` when nothing is selected.
     anchor: Option<usize>,
+    /// The word or line a double- or triple-click selected, while a drag or shift+click can still grow it.
+    grab: Option<Grab<usize>>,
 }
 
 impl LineInput {
     /// An input holding `text`, the cursor at its end.
     pub fn new(text: &str) -> Self {
-        Self { text: text.to_string(), cursor: text.chars().count(), anchor: None }
+        Self { text: text.to_string(), cursor: text.chars().count(), anchor: None, grab: None }
     }
 
     /// The typed text.
@@ -335,6 +388,7 @@ impl LineInput {
                     (KeyCode::Home, _) => 0,
                     _ => len,
                 };
+                self.grab = None;
                 self.anchor = if select { self.anchor.or(Some(self.cursor)) } else { None };
                 self.cursor = to;
                 false
@@ -365,8 +419,34 @@ impl LineInput {
 
     /// Selects the whole text, the cursor at its end.
     pub fn select_all(&mut self) {
+        self.grab = None;
         self.anchor = Some(0);
         self.cursor = self.text.chars().count();
+    }
+
+    /// A mouse press or drag at character `col`; past the end means the end.
+    pub fn point(&mut self, col: usize, how: Pointer) {
+        let len = self.text.chars().count();
+        let col = col.min(len);
+        let unit = |by| if by == Pointer::Word { word_at(&self.text, col) } else { (0, len) };
+        let (anchor, cursor) = match (how, self.grab) {
+            (Pointer::Place, _) => (None, col),
+            (Pointer::Extend, Some(grab)) => {
+                let (anchor, cursor) = grab.grow(unit(grab.by));
+                (Some(anchor), cursor)
+            }
+            (Pointer::Extend, None) => (self.anchor.or(Some(self.cursor)), col),
+            (by @ (Pointer::Word | Pointer::Line), _) => {
+                let (start, end) = unit(by);
+                (self.anchor, self.cursor) = (Some(start), end);
+                self.grab = Some(Grab { by, start, end });
+                return;
+            }
+        };
+        if how == Pointer::Place {
+            self.grab = None;
+        }
+        (self.anchor, self.cursor) = (anchor, cursor);
     }
 
     /// The selection as a range of characters (start, end); `None` when nothing is selected.
@@ -383,6 +463,7 @@ impl LineInput {
 
     /// Removes the selected text, leaving the cursor where it started. Returns whether there was a selection.
     pub fn delete_selection(&mut self) -> bool {
+        self.grab = None;
         let selection = self.selection();
         self.anchor = None;
         let Some((start, end)) = selection else { return false };
@@ -405,6 +486,46 @@ impl LineInput {
         let start = self.cursor.saturating_sub(width - 1);
         (self.text.chars().skip(start).take(width).collect(), self.cursor - start)
     }
+}
+
+/// What a double- or triple-click selected (`by` a word or a line, from `start` to `end`), so that dragging on
+/// selects whole words or lines, always including it: a desktop text field's convention.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Grab<P> {
+    /// `Pointer::Word` or `Pointer::Line`.
+    by: Pointer,
+    /// Where the word or line starts.
+    start: P,
+    /// Where it ends.
+    end: P,
+}
+
+impl<P: Ord + Copy> Grab<P> {
+    /// The selection as (anchor, cursor) when the mouse is over the word or line `(start, end)`: from the grabbed
+    /// one to that one, whichever side it's on.
+    fn grow(self, (start, end): (P, P)) -> (P, P) {
+        if start < self.start { (self.end, start) } else { (self.start, end.max(self.end)) }
+    }
+}
+
+/// The run of word characters, spaces or punctuation around character `col` of `line`, as (start, end).
+/// At the end of the line it's the run before it, so double-clicking past the last word selects that word.
+fn word_at(line: &str, col: usize) -> (usize, usize) {
+    let kind = |c: char| {
+        if c.is_alphanumeric() || c == '_' {
+            0
+        } else if c.is_whitespace() {
+            1
+        } else {
+            2
+        }
+    };
+    let chars: Vec<char> = line.chars().collect();
+    let Some(&c) = chars.get(col).or_else(|| chars.last()) else { return (0, 0) };
+    let col = col.min(chars.len() - 1);
+    let start = chars[..col].iter().rposition(|&d| kind(d) != kind(c)).map_or(0, |i| i + 1);
+    let end = chars[col..].iter().position(|&d| kind(d) != kind(c)).map_or(chars.len(), |i| col + i);
+    (start, end)
 }
 
 #[cfg(test)]
@@ -539,6 +660,64 @@ mod tests {
         input.on_key(shift(KeyCode::Home));
         input.on_key(key(KeyCode::Right));
         assert_eq!((input.cursor(), input.selection()), (3, None));
+    }
+
+    #[test]
+    fn the_mouse_places_the_cursor_and_selects() {
+        let mut ed = TextEditor::new("one two\nthree, four");
+        ed.point((0, 2), Pointer::Place);
+        ed.point((1, 3), Pointer::Extend);
+        assert_eq!(ed.selected_text().as_deref(), Some("e two\nthr"));
+        // Double-click: the word, the spaces or the punctuation under the mouse; past the end, the last word.
+        ed.point((1, 7), Pointer::Word);
+        assert_eq!(ed.selected_text().as_deref(), Some("four"));
+        ed.point((1, 5), Pointer::Word);
+        assert_eq!(ed.selected_text().as_deref(), Some(","));
+        ed.point((0, 99), Pointer::Word);
+        assert_eq!(ed.selected_text().as_deref(), Some("two"));
+        ed.point((1, 0), Pointer::Line);
+        assert_eq!(ed.selected_text().as_deref(), Some("three, four"));
+        // Positions past the text are its end; a click drops the selection.
+        ed.point((9, 99), Pointer::Place);
+        assert_eq!((ed.cursor(), ed.selection()), ((1, 11), None));
+
+        let mut input = LineInput::new("añadir tag");
+        input.point(8, Pointer::Place);
+        input.point(2, Pointer::Extend);
+        assert_eq!(input.selected_text(), Some("adir t"));
+        input.point(0, Pointer::Word);
+        assert_eq!(input.selected_text(), Some("añadir"));
+        input.point(3, Pointer::Line);
+        assert_eq!(input.selected_text(), Some("añadir tag"));
+        assert_eq!(word_at("", 0), (0, 0));
+    }
+
+    #[test]
+    fn dragging_after_a_double_or_triple_click_selects_whole_words_or_lines() {
+        let mut input = LineInput::new("one two three");
+        input.point(5, Pointer::Word);
+        input.point(10, Pointer::Extend);
+        assert_eq!(input.selected_text(), Some("two three"));
+        // Back past where it started: the double-clicked word stays selected, the anchor moves to its end.
+        input.point(1, Pointer::Extend);
+        assert_eq!((input.selected_text(), input.cursor()), (Some("one two"), 0));
+        input.point(5, Pointer::Extend);
+        assert_eq!(input.selected_text(), Some("two"));
+        // A plain click or a key ends it: dragging is by characters again.
+        input.point(5, Pointer::Place);
+        input.point(10, Pointer::Extend);
+        assert_eq!(input.selected_text(), Some("wo th"));
+
+        let mut ed = TextEditor::new("one\ntwo\nthree");
+        ed.point((1, 1), Pointer::Line);
+        ed.point((0, 2), Pointer::Extend);
+        assert_eq!((ed.selected_text().as_deref(), ed.cursor()), (Some("one\ntwo"), (0, 0)));
+        ed.point((2, 1), Pointer::Extend);
+        assert_eq!(ed.selected_text().as_deref(), Some("two\nthree"));
+        // After a key, a drag moves only the cursor end, by characters, from the same anchor.
+        ed.on_key(shift(KeyCode::Left));
+        ed.point((0, 1), Pointer::Extend);
+        assert_eq!(ed.selected_text().as_deref(), Some("ne\n"));
     }
 
     #[test]
