@@ -1,0 +1,22 @@
+[package]
+name = "tasker"
+description = "Lazy-style terminal todo tracker: todo, doing, parked, done, with tags, descriptions, comments and status history. Plain markdown files, no database."
+version.workspace = true
+edition.workspace = true
+rust-version = "1.88"
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+tasker-core.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+# Only what tasker uses: the crossterm backend (all platforms) and a layout cache for faster redraws.
+ratatui = { version = "0.30", default-features = false, features = ["crossterm", "layout-cache"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

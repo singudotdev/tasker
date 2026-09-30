@@ -1,0 +1,3 @@
+max_width = 120
+# Keep short struct literals, calls and conditionals on one line when they fit.
+use_small_heuristics = "Max"

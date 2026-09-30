@@ -1,0 +1,133 @@
+# Publishes a release when a version tag is pushed:
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Builds one self-contained binary per platform for the terminal UI (`tasker`) and for the desktop app
+# (`tasker-gui`) and attaches them, with SHA-256 checksums, under the file names install.sh and install.ps1
+# download (see docs/development.md).
+#
+# Every app and platform is its own job, so a failing build doesn't stop the others: their files can still be
+# downloaded from the run. The release itself is only published when all of them succeed, so the installers never
+# meet a release with a missing file.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-version:
+    name: tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME doesn't match Cargo.toml version $version"
+            exit 1
+          fi
+
+  build:
+    name: ${{ matrix.app }} · ${{ matrix.platform }}
+    needs: check-version
+    strategy:
+      # One failing build must not cancel the others.
+      fail-fast: false
+      matrix:
+        include:
+          # Terminal UI. On Linux, musl gives a fully static binary that runs on any distribution.
+          - { app: tasker, platform: linux x86_64, runner: ubuntu-latest, target: x86_64-unknown-linux-musl }
+          - { app: tasker, platform: linux aarch64, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
+          - { app: tasker, platform: macos universal, runner: macos-latest, target: universal-apple-darwin }
+          - { app: tasker, platform: windows x86_64, runner: windows-latest, target: x86_64-pc-windows-msvc }
+          # Desktop app. It links the system's graphics libraries, so on Linux it can't be static: it's built against
+          # glibc on the oldest supported Ubuntu, to run on any distribution with glibc 2.35 or newer.
+          - { app: tasker-gui, platform: linux x86_64, runner: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
+          - { app: tasker-gui, platform: linux aarch64, runner: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu }
+          - { app: tasker-gui, platform: macos universal, runner: macos-latest, target: universal-apple-darwin }
+          - { app: tasker-gui, platform: windows x86_64, runner: windows-latest, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.runner }}
+    env:
+      APP: ${{ matrix.app }}
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # macOS builds both CPUs and joins them; the others build their own target.
+          targets: ${{ runner.os == 'macOS' && 'x86_64-apple-darwin, aarch64-apple-darwin' || matrix.target }}
+      - if: endsWith(matrix.target, 'linux-musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - if: endsWith(matrix.target, 'linux-gnu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig-dev libwayland-dev libx11-xcb-dev libxkbcommon-x11-dev libvulkan1
+
+      - name: Build
+        if: runner.os != 'macOS'
+        shell: bash
+        run: |
+          cargo build --release --locked -p "$APP" --target "$TARGET"
+          exe=""
+          if [ "$RUNNER_OS" = Windows ]; then exe=.exe; fi
+          mkdir dist
+          cp "target/$TARGET/release/$APP$exe" dist/
+      # One file that runs on both Intel and Apple Silicon Macs.
+      - name: Build (universal)
+        if: runner.os == 'macOS'
+        run: |
+          cargo build --release --locked -p "$APP" --target x86_64-apple-darwin
+          cargo build --release --locked -p "$APP" --target aarch64-apple-darwin
+          mkdir dist
+          lipo -create -output "dist/$APP" \
+            "target/x86_64-apple-darwin/release/$APP" \
+            "target/aarch64-apple-darwin/release/$APP"
+
+      - name: Package
+        if: runner.os != 'Windows'
+        run: |
+          asset="$APP-$TARGET.tar.gz"
+          tar -czf "$asset" -C dist "$APP"
+          if command -v sha256sum >/dev/null; then sha256sum "$asset"; else shasum -a 256 "$asset"; fi > "$asset.sha256"
+      - name: Package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $asset = "$env:APP-$env:TARGET.zip"
+          Compress-Archive -Path "dist/$env:APP.exe" -DestinationPath $asset
+          # Same format as sha256sum: "<hash>  <file>".
+          $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
+          Set-Content -NoNewline -Path "$asset.sha256" -Value "$hash  $asset`n"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-${{ matrix.target }}
+          path: |
+            ${{ matrix.app }}-${{ matrix.target }}.*
+
+  publish:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l dist
+          gh release create "$GITHUB_REF_NAME" dist/* install.sh install.ps1 \
+            --title "tasker $GITHUB_REF_NAME" --generate-notes

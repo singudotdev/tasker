@@ -1,0 +1,20 @@
+[package]
+name = "tasker-core"
+description = "tasker's tasks, markdown storage, tags and app state, shared by the terminal UI and the desktop app."
+version.workspace = true
+edition.workspace = true
+rust-version = "1.88"
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

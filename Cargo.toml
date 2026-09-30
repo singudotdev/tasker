@@ -1,0 +1,44 @@
+[workspace]
+resolver = "3"
+members = ["core", "tui", "gui"]
+# `cargo build` / `cargo test` at the top cover the terminal UI only, which builds fast and on Rust 1.88.
+# The desktop app needs GPUI: add `-p tasker-gui` or `--workspace` (see docs/development.md).
+default-members = ["core", "tui"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+repository = "https://github.com/singudotdev/tasker"
+license = "MIT"
+
+[workspace.dependencies]
+tasker-core = { path = "core" }
+anyhow = "1.0.104"
+chrono = "0.4.45"
+dirs = "7"
+tempfile = "3.27"
+
+[workspace.lints.rust]
+# The only exception is the root check in `core/src/platform.rs`, allowed locally.
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Terminal coordinates are u16, and hashes and counts become indices and sizes; the values always fit.
+cast_possible_truncation = "allow"
+# Binaries and a crate only they use: no public API to document errors and panics for, or to mark #[must_use].
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+return_self_not_must_use = "allow"
+
+[profile.release]
+strip = true
+lto = true
+
+# The patches Zed 1.21.0 builds GPUI with (from its workspace Cargo.toml and Cargo.lock), for the desktop app;
+# a git dependency doesn't carry them over. The terminal UI doesn't use these crates.
+[patch.crates-io]
+async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
+async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
+calloop = { git = "https://github.com/zed-industries/calloop", rev = "eb6b4fd17b9af5ecc226546bdd04185391b3e265" }
