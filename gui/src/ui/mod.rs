@@ -501,4 +501,5 @@ fn edited(text: &str, cursor: Option<usize>, selection: Option<(usize, usize)>) 
 }
 
 #[cfg(test)]
+#[path = "../../tests/ui.rs"]
 mod tests;

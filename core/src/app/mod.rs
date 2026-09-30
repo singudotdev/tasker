@@ -8,6 +8,7 @@ mod actions;
 mod input;
 pub mod mode;
 #[cfg(test)]
+#[path = "../../tests/app.rs"]
 mod tests;
 
 pub use input::Click;

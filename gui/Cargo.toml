@@ -6,6 +6,8 @@ edition.workspace = true
 repository.workspace = true
 license.workspace = true
 publish = false
+# tests/ holds this crate's unit tests, included into their modules with #[path], not integration tests.
+autotests = false
 
 [dependencies]
 tasker-core.workspace = true

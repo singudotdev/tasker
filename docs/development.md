@@ -108,8 +108,7 @@ core/src/            tasker-core: shared by both apps
 │   ├── mod.rs       App: tasks, selection, status message, loading, queries
 │   ├── mode.rs      the screens and dialogs (Mode) and the state each needs
 │   ├── actions.rs   operations: status changes, create, delete, descriptions, comments, tags
-│   ├── input.rs     keys → actions; the wheel; buttons (`press`) and other clicks (`Click`); select all, copy, cut, paste; the mouse in text (`point`)
-│   └── tests.rs     behaviour tests driven by key presses and clicks
+│   └── input.rs     keys → actions; the wheel; buttons (`press`) and other clicks (`Click`); select all, copy, cut, paste; the mouse in text (`point`)
 ├── model/           the domain
 │   ├── mod.rs       Task, Status, StatusChange, Comment
 │   ├── markdown.rs  the task file format: writing and parsing
@@ -143,8 +142,9 @@ gui/src/             tasker-gui: the desktop app
     ├── list.rs      toolbar (new, search, filters), task table, details panel
     ├── issue.rs     task view: status, description, history, comment cards
     ├── tags.rs      tags screen with color, rename and delete buttons
-    ├── dialogs.rs   form, delete confirmations, keyboard shortcuts, text editor, rename tag
-    └── tests.rs     keystroke translation, keys reaching the app, clipboard shortcuts, the mouse in fields, right-click menus
+    └── dialogs.rs   form, delete confirmations, keyboard shortcuts, text editor, rename tag
+
+core/tests/, tui/tests/, gui/tests/   each crate's tests, laid out like its src/ (see Tests)
 ```
 
 ### Data flow
@@ -209,8 +209,19 @@ After a release, keep it backward compatible.
 
 ## Tests
 
-Unit tests live next to the code (`#[cfg(test)]` modules); `core/src/app/tests.rs` drives the whole app with key presses,
-button presses and clicks against a temporary data folder.
+Tests live in each crate's `tests/` folder, one file per module, laid out like `src/`: `core/src/editor.rs` is tested
+by `core/tests/editor.rs`, `core/src/model/mod.rs` by `core/tests/model.rs`. They are unit tests with access to private
+items: the module includes its test file with a hook at its end, and the file starts with `use super::*`:
+
+```rust
+#[cfg(test)]
+#[path = "../tests/editor.rs"]
+mod tests;
+```
+
+The path is relative to the module's folder. `autotests = false` in each crate stops Cargo from also building these
+files as integration tests. Keep them inside the crate: rust-analyzer doesn't follow `#[path]` out of it.
+`core/tests/app.rs` drives the whole app with key presses, button presses and clicks against a temporary data folder.
 
 | module | covers |
 | --- | --- |

@@ -7,6 +7,8 @@ rust-version = "1.88"
 repository.workspace = true
 license.workspace = true
 publish = false
+# tests/ holds this crate's unit tests, included into their modules with #[path], not integration tests.
+autotests = false
 
 [dependencies]
 anyhow.workspace = true
