@@ -260,11 +260,11 @@ The desktop app is checked by running it (`TASKER_DIR=/tmp/t cargo run -p tasker
 
 1. Update `version` under `[workspace.package]` in `Cargo.toml` (and run `cargo build` so `Cargo.lock` follows) and add the
    version to `CHANGELOG.md`. All three crates share it.
-2. Commit, then tag and push the tag:
+2. Commit, then create a signed, annotated tag and push it:
 
    ```sh
-   git tag v0.1.0
-   git push origin main v0.1.0
+   git tag -s vX.Y.Z -m "vX.Y.Z: <summary>"
+   git push origin main vX.Y.Z
    ```
 
 `.github/workflows/release.yml` then checks that the tag matches `Cargo.toml`, builds both apps for every platform
@@ -273,7 +273,6 @@ assets below, their `.sha256` files, and `install.sh` / `install.ps1`. From then
 Each app and platform is a separate job (`tasker · linux x86_64`, `tasker-gui · macos universal`, …), so one failing build
 doesn't stop the others, and their files can still be downloaded from the run. The release is only published when all
 of them succeed, so the installers never find a file missing.
-
 
 The installers (`install.sh`, `install.ps1`) download files from the project's **releases**. A release must contain
 these assets, each with a matching `<file>.sha256` (the output of `sha256sum <file>`):
