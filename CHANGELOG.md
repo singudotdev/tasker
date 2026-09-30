@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Desktop text cursor: sized to the text (1.2 times the font size, centered in the line) instead of the full line height.
+
 ## [0.1.2] - 2026-09-30
 
 ### Changed
